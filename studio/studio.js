@@ -54,6 +54,12 @@
     return field(label, s);
   }
   function textCtl(path, label, type) {
+    if (type === "pdf") {
+      var pf = el("input", { type: "file", accept: "application/pdf" }), cur = get(state, path);
+      pf.addEventListener("change", function () { var f = pf.files[0]; if (!f) return; if (f.type !== "application/pdf") return toast("Please choose a PDF file."); if (f.size > 2000000) return toast("PDF too large (max 2 MB)."); var r = new FileReader(); r.onload = function () { change(function (n) { set(n, path, r.result); }); renderSettings(); toast("CV added — the download button is now visible."); }; r.readAsDataURL(f); });
+      return el("div", { class: "f" }, [el("span", { text: label }), cur ? el("span", { text: "✓ PDF attached", style: "color:var(--text)" }) : null, pf,
+        cur ? el("button", { type: "button", class: "ghost sm", text: "Remove PDF", onclick: function () { change(function (n) { set(n, path, ""); }); renderSettings(); } }) : null]);
+    }
     if (type === "bool") {
       var cb = el("input", { type: "checkbox" }); cb.checked = get(state, path) === true;
       cb.addEventListener("change", function () { change(function (n) { set(n, path, cb.checked); }); });
@@ -124,11 +130,23 @@
         p.appendChild(field("Link", hu));
       }
       if (picked.imgPath) p.appendChild(imageCtl("Image", get(state, picked.imgPath), function (d) { change(function (n) { set(n, picked.imgPath, d); }); renderElement(); }, function () { change(function (n) { set(n, picked.imgPath, ""); }); renderElement(); }));
+      var item = get(state, picked.list + "." + idx);
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        var fsx = el("fieldset", {}, [el("p", { class: "h", text: "All fields of this item" })]);
+        Object.keys(item).forEach(function (k) {
+          var fp = picked.list + "." + idx + "." + k, v = item[k], lab = k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, " $1");
+          if (fp === picked.path || fp === picked.hrefPath || k === "image" || k === "gallery") return;
+          if (typeof v === "boolean") { var cb = el("input", { type: "checkbox" }); cb.checked = v; cb.addEventListener("change", function () { change(function (n) { set(n, fp, cb.checked); }); }); fsx.appendChild(el("label", { class: "f inline" }, [cb, el("span", { text: lab })])); }
+          else if (typeof v === "string") { var ii = el(v.length > 60 ? "textarea" : "input", v.length > 60 ? { rows: "3", maxlength: "600" } : { type: "text", maxlength: "600" }); ii.value = v; ii.addEventListener("input", function () { change(function (n) { set(n, fp, ii.value); }, "f:" + fp); }); fsx.appendChild(field(lab + (k === "slug" ? " (used in the page address)" : ""), ii)); }
+          else if (Array.isArray(v) && v.every(function (x) { return typeof x === "string"; })) { var ai = el("input", { type: "text", maxlength: "600" }); ai.value = v.join(", "); ai.addEventListener("input", function () { change(function (n) { set(n, fp, ai.value.split(",").map(function (x) { return x.trim(); }).filter(Boolean)); }, "a:" + fp); }); fsx.appendChild(field(lab + " (comma separated)", ai)); }
+        });
+        if (fsx.children.length > 1) p.appendChild(fsx);
+      }
       var mv = function (fn, msg) { change(function (n) { fn(get(n, picked.list)); }); picked = null; renderElement(); toast(msg); };
       p.appendChild(el("div", { class: "inline", style: "margin-top:4px" }, [
         el("button", { type: "button", class: "ghost sm", text: "↑ Move up", disabled: idx === 0 ? "" : false, onclick: function () { mv(function (a) { a.splice(idx - 1, 0, a.splice(idx, 1)[0]); }, "Moved up."); } }),
         el("button", { type: "button", class: "ghost sm", text: "↓ Move down", disabled: idx >= list.length - 1 ? "" : false, onclick: function () { mv(function (a) { a.splice(idx + 1, 0, a.splice(idx, 1)[0]); }, "Moved down."); } }),
-        el("button", { type: "button", class: "ghost sm", text: "Duplicate", disabled: list.length >= 24 ? "" : false, onclick: function () { mv(function (a) { a.splice(idx + 1, 0, clone(a[idx])); }, "Item duplicated."); } }),
+        el("button", { type: "button", class: "ghost sm", text: "Duplicate", disabled: list.length >= 24 ? "" : false, onclick: function () { mv(function (a) { var cp = clone(a[idx]); if (cp && typeof cp.slug === "string") { var base = cp.slug.replace(/-copy(-\d+)?$/, ""), n2 = 1, sl = base + "-copy"; while (a.some(function (x) { return x.slug === sl; })) sl = base + "-copy-" + (++n2); cp.slug = sl; } a.splice(idx + 1, 0, cp); }, "Item duplicated."); } }),
         el("button", { type: "button", class: "ghost sm danger", text: "Remove", onclick: function () { mv(function (a) { a.splice(idx, 1); }, "Item removed. Undo with Ctrl/⌘+Z."); } })]));
       p.appendChild(el("p", { class: "hint", text: "Lists keep their design — add items with Duplicate, then edit the copy." }));
     } else if (picked.kind === "image") {
@@ -319,6 +337,11 @@
     var btn = this; if (!site) return;
     var cfg = site.validate(state), extra = [], enc = new TextEncoder();
     var logo = cfg.brand && cfg.brand.logo && dataUrlToFile(cfg.brand.logo, "logo"); if (logo) { extra.push(logo); cfg.brand.logo = logo.name; }
+    var pm = cfg.cv && /^data:application\/pdf;base64,(.+)$/.exec(cfg.cv.file || "");
+    if (pm) { var pb = atob(pm[1]), pu = new Uint8Array(pb.length); for (var q = 0; q < pb.length; q++) pu[q] = pb.charCodeAt(q); extra.push({ name: "assets/cv.pdf", data: pu }); cfg.cv.file = "assets/cv.pdf"; }
+    (function walk(o, k) { if (Array.isArray(o)) o.forEach(function (x, i) { walk(x, k + "-" + i); }); else if (o && typeof o === "object") Object.keys(o).forEach(function (kk) {
+      if (kk === "image" && typeof o[kk] === "string" && o[kk].indexOf("data:") === 0) { var f = dataUrlToFile(o[kk], "img" + k); if (f) { extra.push(f); o[kk] = f.name; } } else walk(o[kk], k + "-" + kk); }); })(
+      Object.keys(cfg).filter(function (k) { return Array.isArray(cfg[k]); }).reduce(function (a, k) { a[k] = cfg[k]; return a; }, {}), "");
     Object.keys(cfg.images).forEach(function (k) { var f = dataUrlToFile(cfg.images[k], "img-" + k); if (f) { extra.push(f); cfg.images[k] = f.name; } });
     btn.disabled = true; btn.textContent = "Preparing…";
     var folder = "droplates-" + slug + "/";

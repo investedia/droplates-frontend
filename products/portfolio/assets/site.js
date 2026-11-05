@@ -29,6 +29,7 @@
     if (typeof v !== "string") return ex;
     v = v.slice(0, 600);
     if (/url$/i.test(key || "")) return v ? safeUrl(v) : "";
+    if (key === "slug") return v.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "item";
     if (key === "image") return v && v.length < 1500000 && IMG_RE.test(v) ? v : "";
     return v;
   }
@@ -58,6 +59,7 @@
         var v = c[g][k];
         if (typeof out[g][k] === "boolean") { if (typeof v === "boolean") out[g][k] = v; return; }
         if (typeof v !== "string") return;
+        if (k === "file") { out[g][k] = (/^data:application\/pdf;base64,[A-Za-z0-9+/=]+$/.test(v) && v.length < 3000000) || /^assets\/[\w\-./]+\.pdf$/.test(v) ? v : ""; return; }
         if (k === "logo" && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[a-z0-9+/=]+$/i.test(v) && v.length < 400000) { out[g][k] = v; return; }
         v = v.slice(0, 400);
         if (/url|logo|endpoint|image/i.test(k) || g === "social") v = v ? safeUrl(v) : "";
@@ -106,9 +108,10 @@
       var d = e.dataset;
       var val = function (f) { return f === "." ? item : (item && typeof item === "object" ? item[f] : undefined); };
       var at = function (f) { return f === "." ? path : path + "." + f; };
-      if (d.k) { var v = val(d.k); e.textContent = v == null ? "" : String(v); e.setAttribute("data-lk", at(d.k)); }
+      if (d.k) { var v = val(d.k); e.textContent = v == null ? "" : String(v); if (!top.closest("[data-unique]")) e.setAttribute("data-lk", at(d.k)); }
       if (d.kInitial) { var t = String(val(d.kInitial) || "?"); e.textContent = t.charAt(0).toUpperCase(); }
       if (d.kHref) { var u = val(d.kHref); if (u) e.setAttribute("href", u); e.setAttribute("data-lk-href", at(d.kHref)); }
+      if (d.kLink) { e.setAttribute("href", (d.kLinkBase || "") + encodeURIComponent(String(val(d.kLink) || ""))); }
       if (d.kBg) { var b = val(d.kBg); e.style.backgroundImage = b ? 'url("' + b + '")' : ""; e.style.backgroundSize = "cover"; e.style.backgroundPosition = "center"; e.classList.toggle("has-img", !!b); e.setAttribute("data-lk-img", at(d.kBg)); }
       if (d.kClass) d.kClass.split(",").forEach(function (p) { var kv = p.split(":"); e.classList.toggle(kv[1], !!val(kv[0])); });
       if (d.kAttr) d.kAttr.split(",").forEach(function (p) { var kv = p.split(":"); e.setAttribute("data-" + kv[0], String(val(kv[1]) || "")); });
@@ -119,8 +122,18 @@
     var tpl = null; [].forEach.call(host.children, function (ch) { if (ch.tagName === "TEMPLATE") tpl = ch; });
     if (!tpl) return;
     [].slice.call(host.children).forEach(function (ch) { if (ch.hasAttribute("data-gen")) ch.remove(); });
-    (Array.isArray(items) ? items : []).forEach(function (item, i) {
-      var frag = tpl.content.cloneNode(true), p = path + "." + i;
+    var rows = (Array.isArray(items) ? items : []).map(function (item, i) { return { item: item, i: i }; });
+    var hd = host.dataset;
+    if (hd.unique) { var seen = {}; rows = rows.filter(function (r) { var v = r.item && r.item[hd.unique]; if (!v || seen[v]) return false; seen[v] = 1; return true; }).map(function (r) { return { item: r.item[hd.unique], i: r.i, uniq: true }; }); }
+    if (hd.where) rows = rows.filter(function (r) { return r.item && r.item[hd.where]; });
+    if (hd.whereParam) {
+      var wp = hd.whereParam.split(":"), want = new URLSearchParams(location.search).get(wp[0]);
+      var at = rows.findIndex(function (r) { return r.item && r.item[wp[1]] === want; }); if (at < 0) at = 0;
+      if (rows.length) { var off = +(hd.offset || 0); rows = [rows[(at + off) % rows.length]]; }
+    }
+    if (hd.limit) rows = rows.slice(0, +hd.limit);
+    rows.forEach(function (r) {
+      var item = r.item, i = r.i, frag = tpl.content.cloneNode(true), p = path + "." + i + (r.uniq ? "." + hd.unique : "");
       [].slice.call(frag.children).forEach(function (top) {
         top.setAttribute("data-gen", "");
         if (top.hasAttribute("data-list")) renderList(top, item && item[top.dataset.list], p + "." + top.dataset.list);
@@ -139,6 +152,7 @@
 
   function apply(c) {
     renderLists(c);
+    document.querySelectorAll("[data-show-set]").forEach(function (el) { el.hidden = !get(c, el.dataset.showSet); });
     document.querySelectorAll("[data-show]").forEach(function (el) { el.hidden = get(c, el.dataset.show) !== true || (!editing && sessionStorage.getItem("dp-dismiss-" + el.dataset.show) === "1"); });
     root.dataset.preset = c.preset; root.dataset.theme = c.theme; root.dataset.density = c.style.density;
     if (c.style.buttons === "auto") delete root.dataset.buttons; else root.dataset.buttons = c.style.buttons;
@@ -276,12 +290,13 @@
   var bs = [].slice.call(document.querySelectorAll(".toggle button"));
   bs.forEach(function (b) { b.addEventListener("click", function () { bs.forEach(function (x) { x.setAttribute("aria-pressed", x === b); }); document.querySelectorAll(".pr").forEach(function (p) { p.firstChild.textContent = p.dataset[b.dataset.p]; }); }); });
 
-  // Filters (projects): buttons with data-f, items with data-cat
-  var fs = [].slice.call(document.querySelectorAll("[data-f]"));
-  fs.forEach(function (b) { b.addEventListener("click", function () {
-    fs.forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+  // Filters (projects): buttons with data-f, items with data-cat. Delegated so generated buttons work.
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-f]"); if (!b || editing) return;
+    var group = b.closest(".chips") || document;
+    group.querySelectorAll("[data-f]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
     document.querySelectorAll("[data-cat]").forEach(function (i) { i.hidden = b.dataset.f !== "all" && i.dataset.cat !== b.dataset.f; });
-  }); });
+  });
 
   // Contact form: validates, then sends to config.contact.formEndpoint if set
   var f = document.getElementById("cf"), err = document.getElementById("err");

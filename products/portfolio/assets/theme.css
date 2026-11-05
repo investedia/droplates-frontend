@@ -59,3 +59,17 @@ nav{background:var(--navbg)}
 [data-preset="contemporary"] .grid .it:last-child:nth-child(even) .im{aspect-ratio:21/9}
 .grid + p{margin-top:32px!important}
 .logo img{height:26px;width:auto;display:inline-block;vertical-align:middle;margin-right:8px}
+
+/* v1.1: availability, featured project, tags, gallery, CV */
+.avail{display:inline-flex;align-items:center;gap:8px;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--text);margin-bottom:20px}
+.avail i{width:8px;height:8px;border-radius:50%;background:#2fa36b;box-shadow:0 0 0 3px rgba(47,163,107,.18)}
+.feat{padding:0 40px 56px}.feat-in{display:grid;grid-template-columns:1.6fr 1fr;gap:32px;align-items:end}
+.feat .im{aspect-ratio:16/10;display:flex}.feat small{color:var(--mute);text-transform:uppercase;letter-spacing:.1em;font-size:12px}
+.feat h2{font-family:var(--font-head);font-size:48px;font-weight:400;margin:10px 0 12px;line-height:1}.feat p{color:var(--mute);margin:0 0 20px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.tags span{font-size:12px;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+.it .cap span span{border:0;padding:0}
+.gal{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 40px}.gal .im{aspect-ratio:1}
+.gal .im:first-of-type{grid-column:span 2;grid-row:span 2;aspect-ratio:auto}
+.cvdl{display:flex;align-items:center;gap:16px;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:40px 40px 0;max-width:640px}
+.cvdl b{display:block}.cvdl span{color:var(--mute);font-size:14px}.cvdl .btn{margin-left:auto}
+@media(max-width:720px){.feat{padding:0 18px 40px}.feat-in{grid-template-columns:1fr}.feat h2{font-size:34px}.gal{grid-template-columns:1fr 1fr;padding:0 18px}.cvdl{margin:32px 18px 0;flex-wrap:wrap}.cvdl .btn{margin-left:0}}

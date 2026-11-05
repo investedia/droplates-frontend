@@ -159,9 +159,50 @@ const ok = (cond, msg) => { cond ? pass++ : fail++; console.log((cond ? '  ✓ '
     await q3.close();
   }
 
+  console.log('Portfolio v1.1 (projects list, featured, filters, case study, CV)');
+  {
+    const P = BASE + 'products/portfolio/';
+    await p.goto(P + 'index.html'); await p.waitForTimeout(300);
+    ok(await p.locator('.grid .it').count() === 6 && await p.locator('.feat h2').innerText() === 'Northpeak identity', 'home renders 6 projects and the featured project');
+    ok(await p.locator('.chips [data-f]').count() === 5, 'filter buttons built from categories');
+    await p.click('.chips [data-f=Print]'); ok(await p.locator('.grid .it:visible').count() === 2, 'category filter works');
+    ok(await p.locator('.avail').isVisible(), 'availability badge shown');
+    await p.goto(P + 'project.html?p=fieldwork'); await p.waitForTimeout(200);
+    ok(await p.locator('.case-hero h1').innerText() === 'Fieldwork journal' && await p.locator('.gal .im').count() === 5 && (await p.locator('.next a').innerText()).startsWith('Cascade'), 'case study chosen by ?p= with gallery and next project');
+    await p.goto(P + 'project.html?p=unknown'); ok(await p.locator('.case-hero h1').innerText() === 'Northpeak identity', 'unknown project falls back to the first');
+    await p.goto(P + 'about.html'); ok(await p.locator('.cvdl').isHidden(), 'CV card hidden until a PDF is added');
+    // Studio: edit project fields, featured, duplicate with unique slug, CV upload, image upload, export
+    await p.goto(BASE + 'studio/?t=portfolio'); await p.evaluate(() => localStorage.clear()); await p.reload(); await p.waitForSelector('#pages .row'); await p.waitForTimeout(600);
+    await p.frameLocator('#frame').locator('.grid .it b').nth(1).click(); await p.waitForTimeout(200);
+    ok(await p.locator('#p-element label:has-text("Featured") input[type=checkbox]').count() === 1 && await p.evaluate(() => [...document.querySelectorAll('#p-element input[type=text]')].some(i => i.value.includes('Interface'))), 'project panel shows all fields (featured, tags)');
+    await p.locator('#p-element label:has-text("Featured") input').check(); await p.waitForTimeout(200);
+    await p.click('#p-element button:text-is("Duplicate")'); await p.waitForTimeout(300);
+    const slugs = await p.evaluate(() => JSON.parse(localStorage.getItem('droplates-studio-portfolio')).projects.map(x => x.slug));
+    ok(slugs.length === 9 && new Set(slugs).size === 9 && slugs.includes('lumen-copy'), 'duplicate project gets a unique slug');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    await p.frameLocator('#frame').locator('.grid .it .im').first().click(); await p.waitForTimeout(200);
+    await p.setInputFiles('#p-element input[type=file]', { name: 'p.png', mimeType: 'image/png', buffer: png }); await p.waitForTimeout(300);
+    await p.click('.tabs [data-tab=settings]');
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF');
+    await p.setInputFiles('#p-settings input[type=file]', { name: 'cv.pdf', mimeType: 'application/pdf', buffer: pdf }); await p.waitForTimeout(300);
+    await p.click('#pages .row:has-text("About")'); await p.waitForTimeout(1200);
+    ok(await p.evaluate(() => !document.getElementById('frame').contentDocument.querySelector('.cvdl').hidden), 'CV upload shows the download card');
+    const [dz] = await Promise.all([p.waitForEvent('download'), p.click('#download')]);
+    const d4 = fs.mkdtempSync(path.join(os.tmpdir(), 'dz4-')); await dz.saveAs(d4 + '/x.zip');
+    execFileSync('python3', ['-c', 'import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])', d4 + '/x.zip', d4]);
+    const site = d4 + '/droplates-portfolio/';
+    ok(fs.existsSync(site + 'assets/cv.pdf') && fs.readdirSync(site + 'assets').some(f => /^img-projects-0\.png$/.test(f)), 'export writes CV and project image as files');
+    const q4 = await ctx.newPage(); await q4.goto('file://' + site + 'index.html'); await q4.waitForTimeout(200);
+    ok(await q4.locator('.grid .it').count() === 6 && await q4.locator('.feat h2').innerText() === 'Northpeak identity', 'exported home renders projects offline');
+    await q4.goto('file://' + site + 'project.html?p=lumen-copy');
+    ok(await q4.locator('.case-hero h1').innerText() === 'Lumen app', 'exported case study for duplicated project works');
+    await q4.goto('file://' + site + 'about.html'); ok(await q4.locator('.cvdl a').getAttribute('href') === 'assets/cv.pdf', 'exported CV link points to the file');
+    await q4.close();
+  }
+
   console.log('Mobile');
   const m = await b.newContext({ ...devices['iPhone 13'] }); const mp = await m.newPage();
-  for (const u of ['', 'templates/', 'templates/saas/', 'studio/?t=saas', ...FREE.map(t => 'products/' + t.slug + '/index.html'), 'products/saas/pricing.html', 'products/saas/changelog.html']) {
+  for (const u of ['', 'templates/', 'templates/saas/', 'studio/?t=saas', ...FREE.map(t => 'products/' + t.slug + '/index.html'), 'products/saas/pricing.html', 'products/saas/changelog.html', 'products/portfolio/project.html', 'products/portfolio/projects.html']) {
     await mp.goto(BASE + u); await mp.waitForTimeout(400);
     ok(await mp.evaluate(() => document.documentElement.scrollWidth) <= 390, 'no horizontal scroll: /' + u);
   }
