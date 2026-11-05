@@ -84,3 +84,4 @@ fieldset{border:0;margin:0;padding:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 .list,.row{min-width:0}.nav .row{max-width:100%}
 @media (max-width:900px){.bar .ghost,.bar .primary{padding:7px 9px}.bar .ib{width:30px;height:30px}#page-m{min-width:96px}}
+.f.inline{display:flex;align-items:center;gap:8px}

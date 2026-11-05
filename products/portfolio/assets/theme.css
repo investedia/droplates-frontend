@@ -73,3 +73,10 @@ nav{background:var(--navbg)}
 .cvdl{display:flex;align-items:center;gap:16px;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:40px 40px 0;max-width:640px}
 .cvdl b{display:block}.cvdl span{color:var(--mute);font-size:14px}.cvdl .btn{margin-left:auto}
 @media(max-width:720px){.feat{padding:0 18px 40px}.feat-in{grid-template-columns:1fr}.feat h2{font-size:34px}.gal{grid-template-columns:1fr 1fr;padding:0 18px}.cvdl{margin:32px 18px 0;flex-wrap:wrap}.cvdl .btn{margin-left:0}}
+/* project cards: staggered image shapes (previously fixed classes t1–t4) */
+.grid .it .im{aspect-ratio:4/5}
+.grid .it:nth-of-type(4n+2) .im{aspect-ratio:1/1}
+.grid .it:nth-of-type(4n+3) .im{aspect-ratio:3/4}
+.grid .it:nth-of-type(4n) .im{aspect-ratio:4/3}
+[data-preset="gallery"] .grid .it .im{aspect-ratio:1/1}
+[data-preset="contemporary"] .grid .it .im{aspect-ratio:4/3}
