@@ -125,6 +125,105 @@ const ok = (cond, msg) => { cond ? pass++ : fail++; console.log((cond ? '  ✓ '
     await q2.close();
   }
 
+  console.log('Roadmap 1 (legacy pricing, comparison columns)');
+  {
+    const P = BASE + 'products/saas/';
+    // Inject extra config after config.js loads, without touching the shipped file.
+    const inject = async (page, js) => {
+      await page.route(P + 'config.js', async route => {
+        const res = await route.fetch(); const body = (await res.text()) + ';' + js;
+        await route.fulfill({ response: res, body, headers: { ...res.headers(), 'cache-control': 'no-store' } });
+      });
+    };
+    await inject(p, "window.SITE_CONFIG.content={'pricing-t5':'Free plan','pricing-t11':'Growth','pricing-t9':'Chat support','pricing-t12':' /mo'};window.SITE_CONFIG.links={'pricing-l2':'contact.html'};");
+    await p.goto(P + 'pricing.html'); await p.waitForTimeout(300);
+    ok((await p.locator('.plan h3').allInnerTexts()).join('|') === 'Free plan|Growth|Team', 'legacy pricing names move into their plans');
+    ok((await p.locator('.plan').nth(0).innerText()).includes('Chat support') && (await p.locator('.plan').nth(1).locator('.pr small').innerText()).trim() === '/mo', 'legacy feature and period values move into their plans');
+    await p.unroute(P + 'config.js');
+
+    await inject(p, "window.SITE_CONFIG.compare[0].rows[0].values=['1'];");
+    await p.goto(P + 'pricing.html'); await p.waitForTimeout(300);
+    ok((await p.evaluate(() => [...document.querySelectorAll('.cmp tbody tr:not(.grp)')][0].innerText.replace(/\s+/g, ' ').trim())) === 'Projects 1 — —', 'short comparison rows are padded with dashes');
+    await p.unroute(P + 'config.js');
+
+    await p.goto(BASE + 'studio/?t=saas'); await p.evaluate(() => localStorage.clear()); await p.reload(); await p.waitForSelector('#pages .row'); await p.waitForTimeout(500);
+    await p.click('#pages .row:has-text("Pricing")'); await p.waitForTimeout(1200);
+    await p.frameLocator('#frame').locator('.plan h3').nth(1).click(); await p.waitForTimeout(200);
+    await p.click('#p-element button:text-is("Duplicate")'); await p.waitForTimeout(400);
+    const rowVals = await p.evaluate(() => {
+      const raw = localStorage.getItem('droplates-studio-saas'); if (!raw) return null;
+      const find = o => { if (!o || typeof o !== 'object') return null; if (Array.isArray(o.compare)) return o; for (const k of Object.keys(o)) { const r = find(o[k]); if (r) return r; } return null; };
+      const cfg = find(JSON.parse(raw)); const row = cfg && cfg.compare[0] && cfg.compare[0].rows[1]; return row ? row.values : null;
+    });
+    ok(JSON.stringify(rowVals) === JSON.stringify(['10k', '1M', '1M', '10M']), 'Studio duplicate of a plan adds a matching comparison column');
+  }
+
+  console.log('Agency v1.1 (packages: price, highlight, compatibility)');
+  {
+    const A = BASE + 'products/agency/';
+    const inject = async (page, js) => {
+      await page.route(A + 'config.js', async route => {
+        const res = await route.fetch(); const body = (await res.text()) + ';' + js;
+        await route.fulfill({ response: res, body, headers: { ...res.headers(), 'cache-control': 'no-store' } });
+      });
+    };
+    const cards = () => p.evaluate(() => [...document.querySelectorAll('.pk article')].map(a => ({ name: a.querySelector('h3').textContent, price: a.querySelector('.pr').textContent, hl: a.classList.contains('hl') })));
+
+    await p.goto(A + 'services.html'); await p.waitForTimeout(300);
+    let c = await cards();
+    ok(c.length === 3 && c.map(x => x.name).join('|') === 'Brand starter|Full identity|Website', 'packages render from config (three cards)');
+    ok(c.every(x => x.price === 'Price on request'), 'empty price falls back to "Price on request"');
+    ok(c[1].hl && !c[0].hl && !c[2].hl, 'middle package is highlighted by default');
+    const btn = await p.evaluate(() => { const hb = getComputedStyle(document.querySelector('.pk .hl .btn')).backgroundColor, card = getComputedStyle(document.querySelector('.pk .hl')).backgroundColor; return { hb, card }; });
+    ok(btn.hb !== btn.card, 'highlighted card button is visible (not the same colour as the card)');
+    await p.unroute(A + 'config.js');
+
+    await inject(p, "window.SITE_CONFIG.packages[0].price='From €1,200';window.SITE_CONFIG.packages[1].price='';window.SITE_CONFIG.packages[2].price='Custom quote';");
+    await p.goto(A + 'services.html'); await p.waitForTimeout(300);
+    c = await cards();
+    ok(c[0].price === 'From €1,200' && c[1].price === 'Price on request' && c[2].price === 'Custom quote', 'custom price text is shown as typed; blank shows the default');
+    await p.unroute(A + 'config.js');
+
+    await inject(p, "window.SITE_CONFIG.packages.forEach(x => x.highlight = false);");
+    await p.goto(A + 'services.html'); await p.waitForTimeout(300);
+    ok((await cards()).every(x => !x.hl), 'highlight can be turned off for every package');
+    await p.unroute(A + 'config.js');
+
+    await inject(p, "window.SITE_CONFIG.packages.forEach((x, i) => x.highlight = i === 0);");
+    await p.goto(A + 'services.html'); await p.waitForTimeout(300);
+    c = await cards();
+    ok(c[0].hl && !c[1].hl, 'highlight moves to whichever package is switched on');
+    await p.unroute(A + 'config.js');
+
+    // Backwards compatibility: an older config without packages hides the section and leaves the rest of the page working.
+    await inject(p, "delete window.SITE_CONFIG.packages;");
+    await p.goto(A + 'services.html'); await p.waitForTimeout(300);
+    ok(await p.evaluate(() => getComputedStyle(document.querySelector('[data-list="packages"]').closest('section')).display === 'none'), 'older config without packages hides the packages section');
+    ok(await p.locator('h1').first().isVisible(), 'older config keeps the rest of Services page');
+    await p.unroute(A + 'config.js');
+
+    // Old pages/config still use the same content keys.
+    await p.goto(A + 'index.html'); await p.waitForTimeout(300);
+    ok(await p.locator('h1').first().isVisible(), 'home page still renders with packages config present');
+
+    // Studio: highlight checkbox and price field edit the package and save to the draft.
+    await p.goto(BASE + 'studio/?t=agency'); await p.evaluate(() => localStorage.clear()); await p.reload(); await p.waitForSelector('#pages .row'); await p.waitForTimeout(500);
+    await p.click('#pages .row:has-text("Services")'); await p.waitForTimeout(1200);
+    await p.frameLocator('#frame').locator('.pk article h3').nth(1).click(); await p.waitForTimeout(300);
+    await p.locator('#p-element label:has-text("Highlight") input').uncheck(); await p.waitForTimeout(300);
+    await p.frameLocator('#frame').locator('.pk article h3').nth(0).click(); await p.waitForTimeout(300);
+    await p.locator('#p-element label:has-text("Price") input').fill('From €1,200'); await p.waitForTimeout(300);
+    await p.waitForTimeout(400);
+    const studioState = await p.evaluate(() => {
+      const raw = localStorage.getItem('droplates-studio-agency'); if (!raw) return null;
+      const find = o => { if (!o || typeof o !== 'object') return null; if (Array.isArray(o.packages)) return o; for (const k of Object.keys(o)) { const r = find(o[k]); if (r) return r; } return null; };
+      const cfg = find(JSON.parse(raw)); return cfg ? cfg.packages : null;
+    });
+    ok(studioState && studioState[1].highlight === false, 'Studio Highlight checkbox turns a package highlight off and saves it');
+    ok(studioState && studioState[0].price === 'From €1,200', 'Studio price field saves a custom price');
+    ok(await p.evaluate(() => document.getElementById('frame').contentDocument.querySelector('.pk article .pr').textContent === 'From €1,200'), 'Studio preview shows the custom price');
+  }
+
   console.log('SaaS v1.1 (lists, tour, comparison, banner, changelog)');
   {
     const P = BASE + 'products/saas/';

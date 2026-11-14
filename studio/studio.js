@@ -15,6 +15,23 @@
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function get(o, p) { return p.split(".").reduce(function (a, k) { return a == null ? a : a[k]; }, o); }
   function set(o, p, v) { var ks = p.split("."), last = ks.pop(); ks.reduce(function (a, k) { return a[k] = a[k] || {}; }, o)[last] = v; }
+  // Move, duplicate or remove an item. Plans also drive comparison columns, so the same change is mirrored into every comparison row.
+  function applyListOp(n, list, fn) {
+    var items = get(n, list);
+    if (list === "plans") {
+      var len = Array.isArray(items) ? items.length : 0;
+      (Array.isArray(n.compare) ? n.compare : []).forEach(function (g) {
+        (g && Array.isArray(g.rows) ? g.rows : []).forEach(function (r) {
+          if (!r) return;
+          var v = Array.isArray(r.values) ? r.values : [];
+          while (v.length < len) v.push("—");
+          r.values = v;
+          fn(v);
+        });
+      });
+    }
+    fn(items);
+  }
   function el(tag, attrs, kids) {
     var e = document.createElement(tag);
     Object.keys(attrs || {}).forEach(function (k) { if (k === "text") e.textContent = attrs[k]; else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), attrs[k]); else if (attrs[k] !== false && attrs[k] != null) e.setAttribute(k, attrs[k]); });
@@ -142,7 +159,7 @@
         });
         if (fsx.children.length > 1) p.appendChild(fsx);
       }
-      var mv = function (fn, msg) { change(function (n) { fn(get(n, picked.list)); }); picked = null; renderElement(); toast(msg); };
+      var mv = function (fn, msg) { change(function (n) { applyListOp(n, picked.list, fn); }); picked = null; renderElement(); toast(msg); };
       p.appendChild(el("div", { class: "inline", style: "margin-top:4px" }, [
         el("button", { type: "button", class: "ghost sm", text: "↑ Move up", disabled: idx === 0 ? "" : false, onclick: function () { mv(function (a) { a.splice(idx - 1, 0, a.splice(idx, 1)[0]); }, "Moved up."); } }),
         el("button", { type: "button", class: "ghost sm", text: "↓ Move down", disabled: idx >= list.length - 1 ? "" : false, onclick: function () { mv(function (a) { a.splice(idx + 1, 0, a.splice(idx, 1)[0]); }, "Moved down."); } }),

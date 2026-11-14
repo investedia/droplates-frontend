@@ -29,6 +29,14 @@ window.SITE_CONFIG = {
   social: { instagram: "", linkedin: "", behance: "" },
   seo: { siteName: "Forma", description: "Forma is an independent design and strategy studio." },
 
+  // Packages shown on the Services page. price: leave "" for "Price on request", or type any text (e.g. "From €X" or "Custom").
+  // highlight: true puts the card in the highlighted style. Turn it off in Template Studio with the Highlight checkbox.
+  packages: [
+    { tag: "Package 01", name: "Brand starter", price: "", summary: "A focused identity for new businesses.", features: ["Logo and wordmark", "Colour and type system", "Mini brand guide"], cta: "Ask about this package", ctaUrl: "contact.html", highlight: false },
+    { tag: "Package 02", name: "Full identity", price: "", summary: "Strategy-led brand for growing companies.", features: ["Positioning workshop", "Complete visual identity", "Brand guidelines", "Launch assets"], cta: "Ask about this package", ctaUrl: "contact.html", highlight: true },
+    { tag: "Package 03", name: "Website", price: "", summary: "Design and build of a marketing site.", features: ["UX and design", "Development", "Launch support"], cta: "Ask about this package", ctaUrl: "contact.html", highlight: false }
+  ],
+
   // Overrides made in Template Studio (click-to-edit). Keys are element IDs in the HTML (data-e, data-el, data-ei, data-s).
   content: {},                 // text overrides, e.g. { "index-t3": "New heading" }
   links: {},                   // button links, e.g. { "index-l1": "pricing.html" }

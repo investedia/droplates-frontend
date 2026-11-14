@@ -29,7 +29,7 @@
 .tthumb i:first-child{background:#262626;width:40%}
 .tthumb.premium i{background:#262626}
 .tbody{padding:16px}
-.tbody h3{margin:8px 0 2px;font-size:16px;font-weight:600}
+.tbody h2{margin:8px 0 2px;font-size:16px;font-weight:600}
 .tbody p{margin:0;font-size:13px;color:var(--muted)}
 .trow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px}
 .tier,.status{font-size:11.5px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:2px 8px}

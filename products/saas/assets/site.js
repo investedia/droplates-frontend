@@ -38,7 +38,52 @@
   function migrate(c) {
     c = JSON.parse(JSON.stringify(obj(c)));
     if (!c.schema || c.schema < 2) { c.content = obj(c.content); c.links = obj(c.links); c.images = obj(c.images); c.sections = obj(c.sections); c.schema = 2; }
+    migratePricing(c);
     return c;
+  }
+  // Early SaaS builds stored pricing text as pricing-tN / pricing-lN overrides. Move each value into the plan it belonged to.
+  var LEGACY_PRICING = {
+    5: "0.name", 6: "0.period", 7: "0.features.0", 8: "0.features.1", 9: "0.features.2", 10: "0.cta",
+    11: "1.name", 12: "1.period", 13: "1.features.0", 14: "1.features.1", 15: "1.features.2", 16: "1.features.3", 17: "1.cta",
+    18: "2.name", 19: "2.period", 20: "2.features.0", 21: "2.features.1", 22: "2.features.2", 23: "2.features.3", 24: "2.cta"
+  };
+  function setLegacy(plans, spec, v) {
+    var p = spec.split("."), item = plans[+p[0]];
+    if (!item || typeof item !== "object") return;
+    if (p.length === 3) { var arr = Array.isArray(item.features) ? item.features : []; arr[+p[2]] = v; item.features = arr; }
+    else item[p[1]] = v;
+  }
+  function migratePricing(c) {
+    if (!Array.isArray(c.plans)) return;
+    var content = obj(c.content), links = obj(c.links), touched = false;
+    Object.keys(content).forEach(function (k) {
+      var m = /^pricing-t(\d+)$/.exec(k);
+      if (!m || !LEGACY_PRICING[m[1]]) return;
+      var v = typeof content[k] === "string" ? content[k].trim() : "";
+      if (v) setLegacy(c.plans, LEGACY_PRICING[m[1]], v.slice(0, 200));
+      delete content[k]; touched = true;
+    });
+    Object.keys(links).forEach(function (k) {
+      var m = /^pricing-l([1-3])$/.exec(k);
+      if (!m) return;
+      if (typeof links[k] === "string" && links[k]) setLegacy(c.plans, (+m[1] - 1) + ".ctaUrl", links[k]);
+      delete links[k]; touched = true;
+    });
+    if (touched) {
+      c.plans.forEach(function (pl) { if (pl && Array.isArray(pl.features)) pl.features = pl.features.filter(function (f) { return typeof f === "string" && f; }); });
+      c.content = content; c.links = links;
+    }
+  }
+  // Comparison rows hold one value per plan, in plan order. Pad missing cells with "—" and drop extras so columns always line up.
+  function normaliseCompare(o) {
+    var n = Array.isArray(o.plans) ? o.plans.length : 0;
+    (Array.isArray(o.compare) ? o.compare : []).forEach(function (g) {
+      (g && Array.isArray(g.rows) ? g.rows : []).forEach(function (r) {
+        var v = r && Array.isArray(r.values) ? r.values : [], fixed = [];
+        for (var i = 0; i < n; i++) fixed.push(typeof v[i] === "string" ? v[i] : "—");
+        if (r) r.values = fixed;
+      });
+    });
   }
   function validate(c, d) {
     var out = JSON.parse(JSON.stringify(d));
@@ -72,6 +117,7 @@
     Object.keys(obj(c.links)).forEach(function (k) { var v = safeUrl(c.links[k]); if (KEY_RE.test(k) && v) out.links[k] = v; });
     Object.keys(obj(c.images)).forEach(function (k) { var v = c.images[k]; if (KEY_RE.test(k) && typeof v === "string" && v.length < 1500000 && IMG_RE.test(v)) out.images[k] = v; });
     Object.keys(obj(c.sections)).forEach(function (k) { if (KEY_RE.test(k) && obj(c.sections[k]).hidden === true) out.sections[k] = { hidden: true }; });
+    normaliseCompare(out);
     return out;
   }
 
@@ -108,7 +154,7 @@
       var d = e.dataset;
       var val = function (f) { return f === "." ? item : (item && typeof item === "object" ? item[f] : undefined); };
       var at = function (f) { return f === "." ? path : path + "." + f; };
-      if (d.k) { var v = val(d.k); e.textContent = v == null ? "" : String(v); if (!top.closest("[data-unique]")) e.setAttribute("data-lk", at(d.k)); }
+      if (d.k) { var v = val(d.k); var txt = v == null ? "" : String(v); if (!txt && d.kEmpty) txt = d.kEmpty; e.textContent = txt; if (!top.closest("[data-unique]")) e.setAttribute("data-lk", at(d.k)); }
       if (d.kInitial) { var t = String(val(d.kInitial) || "?"); e.textContent = t.charAt(0).toUpperCase(); }
       if (d.kHref) { var u = val(d.kHref); if (u) e.setAttribute("href", u); e.setAttribute("data-lk-href", at(d.kHref)); }
       if (d.kLink) { e.setAttribute("href", (d.kLinkBase || "") + encodeURIComponent(String(val(d.kLink) || ""))); }
@@ -147,6 +193,8 @@
     document.querySelectorAll("[data-list]").forEach(function (host) {
       if (host.closest("template,[data-gen]")) return;
       renderList(host, get(c, host.dataset.list), host.dataset.list);
+      // data-hide-empty: hide the host's section when the list has no items (e.g. an older config without this list).
+      if (host.hasAttribute("data-hide-empty") && !host.querySelector("[data-gen]")) { var sec = host.closest("[data-s]"); if (sec) sec.style.display = "none"; }
     });
   }
 

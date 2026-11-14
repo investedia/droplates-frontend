@@ -62,7 +62,7 @@ const card = t => `<a class="tcard" href="${'/templates/' + t.slug + '/'}" data-
   <div class="tthumb ${t.tier}" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div class="tbody">
     <div class="trow"><span class="tier">${M.tiers[t.tier]}</span><span class="status">${t.status === 'released' ? 'Free download' : 'Planned'}</span></div>
-    <h3>${esc(t.name)}</h3>
+    <h2>${esc(t.name)}</h2>
     <p>${esc(M.categories[t.category])}</p>
     <div class="trow"><span class="price">${eur(t.price)}</span><span class="plat">${t.platforms.map(p => M.platforms[p]).join(' · ')}</span></div>
   </div></a>`;
